@@ -17,12 +17,60 @@ uvicorn app.main:app --reload
 
 Open <http://127.0.0.1:8000/docs> to try the API.
 
-## Starting endpoints
+## API contract
 
-- `GET /healthz` — returns `{"status":"ok"}`.
-- `GET /tasks` — returns all in-memory tasks, or filters by completion status with `?completed=true` or `?completed=false`.
-- `POST /tasks` — creates a task from `{"title":"..."}` and optional `completed` value.
+### `GET /healthz`
 
-Tasks reset when the server restarts. There is no database, authentication, user interface, Copilot customization, or external tool configuration in this starter. Later course modules add capabilities when the exercise requires them.
+Returns `200 OK` when the service is running:
+
+```json
+{"status": "ok"}
+```
+
+### `GET /tasks`
+
+Returns `200 OK` with a JSON array of tasks. Each task has this shape:
+
+```json
+{
+  "id": 1,
+  "title": "Write documentation",
+  "completed": false
+}
+```
+
+The array is empty when there are no tasks. To filter tasks by completion status, use `?completed=true` or `?completed=false`; without this query parameter, all tasks are returned.
+
+### `POST /tasks`
+
+Create a task by sending a JSON object with these accepted fields:
+
+| Field | Type | Requirement |
+| --- | --- | --- |
+| `title` | string | Required; 1–120 characters |
+| `completed` | boolean | Optional; defaults to `false` |
+
+For example:
+
+```json
+{
+  "title": "Write documentation",
+  "completed": false
+}
+```
+
+A successful request returns `201 Created` with the created task, including its generated integer `id`:
+
+```json
+{
+  "id": 1,
+  "title": "Write documentation",
+  "completed": false
+}
+```
+
+Invalid request data, such as a missing or out-of-range `title`, is rejected with a validation error.
+
+Tasks are held in memory and reset when the server restarts. There is no database, authentication, user interface, Copilot customization, or external tool configuration in this starter. Later course modules add capabilities when the exercise requires them.
 
 Run the focused endpoint tests with `python -m unittest discover -s tests`.
