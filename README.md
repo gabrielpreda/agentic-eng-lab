@@ -35,11 +35,12 @@ Returns `200 OK` with a JSON array of tasks. Each task has this shape:
 {
   "id": 1,
   "title": "Write documentation",
-  "completed": false
+  "completed": false,
+  "priority": "normal"
 }
 ```
 
-The array is empty when there are no tasks. To filter tasks by completion status, use `?completed=true` or `?completed=false`; without this query parameter, all tasks are returned.
+The array is empty when there are no tasks. To filter tasks by completion status, use `?completed=true` or `?completed=false`. To filter by priority, use `?priority=low`, `?priority=normal`, or `?priority=high`; other priority values are rejected with `422`. The two filters can be combined (for example `?completed=false&priority=high`), in which case only tasks matching both are returned. Without these query parameters, all tasks are returned. Tasks are always ordered by priority: `high`, then `normal`, then `low`.
 
 ### `POST /tasks`
 
@@ -49,13 +50,15 @@ Create a task by sending a JSON object with these accepted fields:
 | --- | --- | --- |
 | `title` | string | Required; 1–120 characters |
 | `completed` | boolean | Optional; defaults to `false` |
+| `priority` | string | Optional; one of `low`, `normal`, or `high`; defaults to `normal`. Other values are rejected with `422` |
 
 For example:
 
 ```json
 {
   "title": "Write documentation",
-  "completed": false
+  "completed": false,
+  "priority": "normal"
 }
 ```
 
@@ -65,7 +68,8 @@ A successful request returns `201 Created` with the created task, including its 
 {
   "id": 1,
   "title": "Write documentation",
-  "completed": false
+  "completed": false,
+  "priority": "normal"
 }
 ```
 
