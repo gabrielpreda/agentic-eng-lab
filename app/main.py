@@ -1,12 +1,43 @@
 """A small in-memory task API used in the Copilot course."""
 
+import re
+from datetime import date, timedelta
 from itertools import count
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 app = FastAPI(title="Course Task API", version="0.1.0")
+
+
+def _parse_iso_calendar_date(value: object, field_name: str) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
+    ):
+        raise ValueError(f"{field_name} must use YYYY-MM-DD format")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{field_name} must be a valid calendar date") from error
+
+
+def _parse_due_before(value: object) -> date | None:
+    return _parse_iso_calendar_date(value, "due_before")
+
+
+DueBeforeDate = Annotated[date | None, BeforeValidator(_parse_due_before)]
 
 
 class TaskCreate(BaseModel):
@@ -15,6 +46,7 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     completed: bool = False
     priority: Literal["low", "normal", "high"] = "normal"
+    due_date: date | None = None
 
     @field_validator("title")
     @classmethod
@@ -23,11 +55,33 @@ class TaskCreate(BaseModel):
             raise ValueError("title must contain non-whitespace characters")
         return value
 
+    @field_validator("due_date", mode="before")
+    @classmethod
+    def due_date_must_be_iso_calendar_date(cls, value: object) -> date | None:
+        return _parse_iso_calendar_date(value, "due_date")
+
 
 class Task(TaskCreate):
     """Task returned by the API."""
 
     id: int
+
+    @computed_field
+    @property
+    def due_status(
+        self,
+    ) -> Literal["unscheduled", "completed", "overdue", "upcoming", "scheduled"]:
+        if self.completed:
+            return "completed"
+        if self.due_date is None:
+            return "unscheduled"
+
+        today = date.today()
+        if self.due_date < today:
+            return "overdue"
+        if self.due_date <= today + timedelta(days=7):
+            return "upcoming"
+        return "scheduled"
 
 
 _PRIORITY_RANK = {"high": 0, "normal": 1, "low": 2}
@@ -47,14 +101,21 @@ async def healthz() -> dict[str, str]:
 async def list_tasks(
     completed: bool | None = None,
     priority: Literal["low", "normal", "high"] | None = None,
+    due_status: Literal["upcoming", "overdue"] | None = None,
+    due_before: DueBeforeDate = None,
 ) -> list[Task]:
-    """Return tasks ordered high-first, optionally filtered by completion and priority."""
+    """Return tasks ordered high-first, optionally filtered by their fields."""
 
     matches = [
         task
         for task in _tasks
         if (completed is None or task.completed == completed)
         and (priority is None or task.priority == priority)
+        and (due_status is None or task.due_status == due_status)
+        and (
+            due_before is None
+            or (task.due_date is not None and task.due_date <= due_before)
+        )
     ]
     # sorted() is stable, so equal-priority tasks keep their stored order.
     return sorted(matches, key=lambda task: _PRIORITY_RANK[task.priority])
