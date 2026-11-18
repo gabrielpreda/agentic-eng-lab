@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from itertools import count
 from typing import Annotated, Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -48,6 +48,7 @@ class TaskCreate(BaseModel):
     priority: Literal["low", "normal", "high"] = "normal"
     due_date: date | None = None
     labels: list[str] = Field(default_factory=list)
+    dependency_ids: list[int] = Field(default_factory=list)
 
     @field_validator("title")
     @classmethod
@@ -83,6 +84,13 @@ class TaskCreate(BaseModel):
     @classmethod
     def due_date_must_be_iso_calendar_date(cls, value: object) -> date | None:
         return _parse_iso_calendar_date(value, "due_date")
+
+    @field_validator("dependency_ids")
+    @classmethod
+    def dependency_ids_must_be_unique(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("dependency_ids must not contain duplicates")
+        return value
 
 
 class Task(TaskCreate):
@@ -151,6 +159,17 @@ async def list_tasks(
 @app.post("/tasks", response_model=Task, status_code=201)
 async def create_task(request: TaskCreate) -> Task:
     """Create a task and store it in memory."""
+
+    existing_ids = {task.id for task in _tasks}
+    unknown_ids = set(request.dependency_ids) - existing_ids
+    if unknown_ids:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "dependency_ids must reference existing tasks: "
+                f"{sorted(unknown_ids)}"
+            ),
+        )
 
     task = Task(id=next(_task_ids), **request.model_dump())
     _tasks.append(task)

@@ -39,7 +39,8 @@ Returns `200 OK` with a JSON array of tasks. Each task has this shape:
   "priority": "normal",
   "due_date": "2026-12-01",
   "due_status": "upcoming",
-  "labels": ["project"]
+  "labels": ["project"],
+  "dependency_ids": []
 }
 ```
 
@@ -49,7 +50,7 @@ To filter by a label, use `?label=project`. The query is trimmed and lowercased 
 
 To select tasks due on or before a specific date, use `?due_before=YYYY-MM-DD`. The date is inclusive; tasks without a due date are excluded, while completed tasks are included unless narrowed by `completed`. This filter can be combined with `completed`, `priority`, `due_status`, and `label`. The selected date must be a valid ISO calendar date; invalid values are rejected with `422`.
 
-Each task includes `due_date`, `due_status`, and `labels`. A missing due date is returned as `null` and has status `unscheduled`. Completed tasks have status `completed`; incomplete tasks are `overdue` when their date has passed, `upcoming` when due within seven days (including today), or `scheduled` when due later. Status is computed using the server's current calendar date. Tasks created without labels have an empty `labels` array.
+Each task includes `due_date`, `due_status`, `labels`, and `dependency_ids`. A missing due date is returned as `null` and has status `unscheduled`. Completed tasks have status `completed`; incomplete tasks are `overdue` when their date has passed, `upcoming` when due within seven days (including today), or `scheduled` when due later. Status is computed using the server's current calendar date. Tasks created without labels or dependencies have empty `labels` and `dependency_ids` arrays.
 
 ### `POST /tasks`
 
@@ -62,6 +63,7 @@ Create a task by sending a JSON object with these accepted fields:
 | `priority` | string | Optional; one of `low`, `normal`, or `high`; defaults to `normal`. Other values are rejected with `422` |
 | `due_date` | string | Optional; ISO calendar date `YYYY-MM-DD`; omitted or `null` means no due date. Invalid dates are rejected with `422` |
 | `labels` | array of strings | Optional; defaults to `[]`. At most five labels are allowed; each must contain 1–24 characters after trimming. Labels are trimmed, lowercased, and deduplicated while preserving first-seen order. Invalid values are rejected with `422` |
+| `dependency_ids` | array of integers | Optional; defaults to `[]`. Every ID must refer to an existing task, and duplicate IDs are rejected with `422` |
 
 For example:
 
@@ -71,7 +73,8 @@ For example:
   "completed": false,
   "priority": "normal",
   "due_date": "2026-12-01",
-  "labels": ["project", "documentation"]
+  "labels": ["project", "documentation"],
+  "dependency_ids": []
 }
 ```
 
@@ -85,11 +88,12 @@ A successful request returns `201 Created` with the created task, including its 
   "priority": "normal",
   "due_date": "2026-12-01",
   "due_status": "upcoming",
-  "labels": ["project", "documentation"]
+  "labels": ["project", "documentation"],
+  "dependency_ids": []
 }
 ```
 
-Existing request fields and endpoints remain unchanged. The responses add `due_date`, `due_status`, and `labels`; clients should ignore response properties they do not use.
+Existing request fields and endpoints remain supported. `dependency_ids` is added to task creation and responses, alongside `due_date`, `due_status`, and `labels`; clients should ignore response properties they do not use.
 
 Invalid request data, such as a missing or out-of-range `title`, is rejected with a validation error.
 

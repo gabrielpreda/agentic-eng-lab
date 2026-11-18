@@ -41,7 +41,116 @@ def test_create_task_defaults_to_incomplete(client):
         "due_date": None,
         "due_status": "unscheduled",
         "labels": [],
+        "dependency_ids": [],
     }
+
+
+@pytest.mark.parametrize("dependency_ids", [None, []])
+def test_create_task_defaults_to_empty_dependencies(client, dependency_ids):
+    task_data = {"title": "Create a task"}
+    if dependency_ids is not None:
+        task_data["dependency_ids"] = dependency_ids
+
+    created = client.post("/tasks", json=task_data)
+    listed = client.get("/tasks")
+
+    assert created.status_code == 201
+    assert created.json()["dependency_ids"] == []
+    assert listed.status_code == 200
+    assert listed.json()[0]["dependency_ids"] == []
+
+
+def test_create_task_saves_existing_dependency_ids_in_responses(client):
+    first = client.post("/tasks", json={"title": "First prerequisite"}).json()
+    second = client.post("/tasks", json={"title": "Second prerequisite"}).json()
+
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Dependent task",
+            "dependency_ids": [first["id"], second["id"]],
+        },
+    )
+    listed = client.get("/tasks")
+
+    assert created.status_code == 201
+    assert set(created.json()["dependency_ids"]) == {first["id"], second["id"]}
+    assert len(created.json()["dependency_ids"]) == 2
+    assert listed.status_code == 200
+    assert {
+        task["id"]: task["dependency_ids"] for task in listed.json()
+    } == {
+        first["id"]: [],
+        second["id"]: [],
+        created.json()["id"]: created.json()["dependency_ids"],
+    }
+
+
+def test_create_task_rejects_unknown_dependency_id_without_creating_task(client):
+    existing = client.post("/tasks", json={"title": "Existing task"}).json()
+
+    response = client.post(
+        "/tasks",
+        json={"title": "Dependent task", "dependency_ids": [999]},
+    )
+
+    assert response.status_code == 422
+    assert [task["id"] for task in client.get("/tasks").json()] == [
+        existing["id"]
+    ]
+
+
+def test_create_task_rejects_duplicate_dependency_ids_without_creating_task(
+    client,
+):
+    existing = client.post("/tasks", json={"title": "Existing task"}).json()
+
+    response = client.post(
+        "/tasks",
+        json={
+            "title": "Dependent task",
+            "dependency_ids": [existing["id"], existing["id"]],
+        },
+    )
+
+    assert response.status_code == 422
+    assert [task["id"] for task in client.get("/tasks").json()] == [
+        existing["id"]
+    ]
+
+
+def test_create_task_rejects_guessed_self_dependency_as_unknown(client):
+    first = client.post("/tasks", json={"title": "First task"}).json()
+
+    response = client.post(
+        "/tasks",
+        json={
+            "title": "Self-dependent task",
+            "dependency_ids": [first["id"] + 1],
+        },
+    )
+
+    assert response.status_code == 422
+    assert [task["id"] for task in client.get("/tasks").json()] == [first["id"]]
+
+
+def test_create_task_can_link_dependencies_to_previously_created_task_chain(
+    client,
+):
+    first = client.post("/tasks", json={"title": "First task"}).json()
+    second = client.post(
+        "/tasks",
+        json={"title": "Second task", "dependency_ids": [first["id"]]},
+    ).json()
+
+    third_response = client.post(
+        "/tasks",
+        json={"title": "Third task", "dependency_ids": [second["id"]]},
+    )
+
+    assert third_response.status_code == 201
+    assert second["dependency_ids"] == [first["id"]]
+    assert third_response.json()["dependency_ids"] == [second["id"]]
 
 
 def test_create_task_normalizes_labels_and_lists_them(client):
