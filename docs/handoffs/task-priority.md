@@ -11,10 +11,11 @@ Update this note from the current repository state before changing to a new Copi
 
 ## Current state
 
-- **Implementation files currently modified in the worktree:** `app/main.py`, `README.md`, and `tests/test_api.py` contain the priority implementation along with the later deadline feature. This handoff is being updated to correct its previous file-state note; `docs/tasks/task-priority.md` is not currently modified.
+- **Verified checkout:** `develop` at `c1910b7`. `app/main.py`, `README.md`, and `tests/test_api.py` have no tracked worktree changes. The worktree has unrelated untracked `.github/pull_request_template.md`, `Dockerfile`, and `docs/handoffs/capstone-verification-template.md`.
+- The priority implementation is part of repository history, not an uncommitted change. The four `capstone/*` feature commits are also present in the merged `main` history.
 - **Decision(s):** Requirements, specification, and task list are approved. Combining `completed` and `priority` filters is approved and implemented. Ordering uses a stable sort, so equal-priority tasks keep stored order, but that tie behavior is deliberately not asserted.
 - **Unresolved questions/blockers:** Equal-priority ordering is still an open decision in the requirements. No blockers.
-- **API-surface review (AC-5):** Only `GET /healthz`, `GET /tasks`, `POST /tasks`; no sort parameter and no priority-update route.
+- **Current API surface:** `GET /healthz`, `GET /tasks`, `POST /tasks`, and `POST /tasks/{task_id}/complete`; there is no alternate sort parameter or priority-update route.
 
 ## Verification evidence
 
@@ -22,11 +23,11 @@ Update this note from the current repository state before changing to a new Copi
 |---|---|---|
 | `.venv/bin/python -m pytest tests/test_api.py -k "orders or keeps_priority" -q` | Passed: 2 passed | T-4 (AC-4); both tests failed before the change |
 | `.venv/bin/python -m pytest -q` | Passed: 35 passed | Full regression after T-4 |
-| `.venv/bin/python -m pytest -q` | Passed: 65 passed | Latest full regression, including the selected-date deadline and task-label changes (2026-11-18) |
+| `.venv/bin/python -m pytest -q` | Passed: 79 passed | Re-run on the verified `develop` checkout (2026-11-18); one existing Starlette/httpx deprecation warning |
 
 ## Next step
 
-Nothing is planned. Remaining work is outside the task list: resolve the equal-priority ordering question (and add a tie test if the answer is "preserve order"), then review the diff and decide on committing. Nothing has been committed.
+No T-1–T-4 implementation work remains. The equal-priority ordering question is still open; resolve it before adding a tie-order assertion. Broader feature candidates and team practices are recorded in [the capstone retrospective](../capstone-retrospective.md); they are proposals, not approved implementation scope. No implementation or release authorization is implied.
 
 ## Session handoff prompt
 
