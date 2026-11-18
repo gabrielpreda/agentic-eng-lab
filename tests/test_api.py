@@ -40,7 +40,132 @@ def test_create_task_defaults_to_incomplete(client):
         "priority": "normal",
         "due_date": None,
         "due_status": "unscheduled",
+        "labels": [],
     }
+
+
+def test_create_task_normalizes_labels_and_lists_them(client):
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Organize project work",
+            "labels": [" Project ", "ops", "project", " Ops "],
+        },
+    )
+
+    listed = client.get("/tasks")
+
+    assert created.status_code == 201
+    assert created.json()["labels"] == ["project", "ops"]
+    assert listed.status_code == 200
+    assert listed.json()[0]["labels"] == ["project", "ops"]
+
+
+def test_create_task_accepts_five_labels_and_24_character_labels(client):
+    labels = ["a", "b" * 24, "c", "d", "e"]
+
+    response = client.post(
+        "/tasks",
+        json={"title": "Organize project work", "labels": labels},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["labels"] == labels
+
+
+@pytest.mark.parametrize(
+    "labels",
+    [
+        ["one", "two", "three", "four", "five", "six"],
+        ["duplicate"] * 6,
+        [""],
+        ["   "],
+        ["x" * 25],
+        "project",
+        None,
+        ["project", 1],
+    ],
+)
+def test_create_task_rejects_invalid_labels(client, labels):
+    response = client.post(
+        "/tasks",
+        json={"title": "Organize project work", "labels": labels},
+    )
+
+    assert response.status_code == 422
+    assert client.get("/tasks").json() == []
+
+
+def test_list_tasks_filters_by_normalized_label_once(client):
+    client.post(
+        "/tasks",
+        json={
+            "title": "Matching task",
+            "labels": [" Project ", "project", "Ops"],
+        },
+    )
+    client.post(
+        "/tasks",
+        json={"title": "Different label", "labels": ["design"]},
+    )
+    client.post(
+        "/tasks",
+        json={"title": "Partial label", "labels": ["project-management"]},
+    )
+
+    response = client.get("/tasks", params={"label": " PROJECT "})
+
+    assert response.status_code == 200
+    assert [task["title"] for task in response.json()] == ["Matching task"]
+
+
+def test_list_tasks_returns_empty_list_when_label_does_not_match(client):
+    client.post(
+        "/tasks",
+        json={"title": "Project task", "labels": ["project"]},
+    )
+
+    response = client.get("/tasks", params={"label": "workstream"})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_tasks_combines_label_with_existing_filters(client, monkeypatch):
+    _freeze_today(monkeypatch)
+    tasks = [
+        ("matching", False, "high", "2026-12-09", ["project"]),
+        ("completed", True, "high", "2026-12-09", ["project"]),
+        ("wrong priority", False, "normal", "2026-12-09", ["project"]),
+        ("wrong label", False, "high", "2026-12-09", ["design"]),
+        ("after cutoff", False, "high", "2026-12-11", ["project"]),
+        ("not overdue", False, "high", "2026-12-10", ["project"]),
+    ]
+    for title, completed, priority, due_date, labels in tasks:
+        client.post(
+            "/tasks",
+            json={
+                "title": title,
+                "completed": completed,
+                "priority": priority,
+                "due_date": due_date,
+                "labels": labels,
+            },
+        )
+
+    response = client.get(
+        "/tasks",
+        params={
+            "label": " PROJECT ",
+            "completed": False,
+            "priority": "high",
+            "due_status": "overdue",
+            "due_before": "2026-12-10",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [task["title"] for task in response.json()] == ["matching"]
 
 
 def test_task_responses_include_computed_due_status(client, monkeypatch):

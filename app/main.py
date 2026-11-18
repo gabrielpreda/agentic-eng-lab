@@ -47,6 +47,7 @@ class TaskCreate(BaseModel):
     completed: bool = False
     priority: Literal["low", "normal", "high"] = "normal"
     due_date: date | None = None
+    labels: list[str] = Field(default_factory=list)
 
     @field_validator("title")
     @classmethod
@@ -54,6 +55,29 @@ class TaskCreate(BaseModel):
         if not value.strip():
             raise ValueError("title must contain non-whitespace characters")
         return value
+
+    @field_validator("labels", mode="before")
+    @classmethod
+    def normalize_labels(cls, value: object) -> list[str]:
+        if not isinstance(value, list):
+            raise ValueError("labels must be a list")
+        if len(value) > 5:
+            raise ValueError("labels must contain at most five items")
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for label in value:
+            if not isinstance(label, str):
+                raise ValueError("each label must be a string")
+            label = label.strip()
+            if not 1 <= len(label) <= 24:
+                raise ValueError("each label must contain 1 to 24 characters")
+
+            label = label.lower()
+            if label not in seen:
+                seen.add(label)
+                normalized.append(label)
+        return normalized
 
     @field_validator("due_date", mode="before")
     @classmethod
@@ -101,16 +125,19 @@ async def healthz() -> dict[str, str]:
 async def list_tasks(
     completed: bool | None = None,
     priority: Literal["low", "normal", "high"] | None = None,
+    label: str | None = None,
     due_status: Literal["upcoming", "overdue"] | None = None,
     due_before: DueBeforeDate = None,
 ) -> list[Task]:
     """Return tasks ordered high-first, optionally filtered by their fields."""
 
+    normalized_label = label.strip().lower() if label is not None else None
     matches = [
         task
         for task in _tasks
         if (completed is None or task.completed == completed)
         and (priority is None or task.priority == priority)
+        and (normalized_label is None or normalized_label in task.labels)
         and (due_status is None or task.due_status == due_status)
         and (
             due_before is None
