@@ -1,4 +1,16 @@
-"""Start the Task API and verify its public HTTP contract in CI."""
+"""Exercise a minimal live HTTP flow against the Task API.
+
+The script launches Uvicorn as a child process on ``127.0.0.1:8000`` and
+checks that the service becomes healthy, accepts task creation, and returns
+the created task from its list endpoint. It is intended as a CI smoke check,
+complementing the in-process API tests with a real HTTP server.
+
+Run this script from the repository root after installing the application
+dependencies. The port is fixed, so another service must not already be
+listening on port 8000. Task data is held in the child process's in-memory
+store and disappears when that process exits. The child server is stopped on
+both success and failure.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +26,14 @@ BASE_URL = "http://127.0.0.1:8000"
 
 
 def request_json(path: str, *, method: str = "GET", payload: dict | None = None) -> tuple[int, object]:
+    """Send one JSON request to the local API and decode its JSON response.
+
+    ``path`` is appended to ``BASE_URL``; ``method`` defaults to ``GET``.
+    When ``payload`` is provided, it is JSON-encoded and sent as the request
+    body. Return the HTTP status and decoded response body. Network errors,
+    timeouts, and non-success HTTP responses are allowed to propagate to the
+    caller.
+    """
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = Request(
         f"{BASE_URL}{path}",
@@ -26,6 +46,14 @@ def request_json(path: str, *, method: str = "GET", payload: dict | None = None)
 
 
 def wait_until_ready(process: subprocess.Popen[bytes]) -> None:
+    """Wait for the child server's health endpoint, or fail on timeout/exit.
+
+    Poll ``/healthz`` for up to 20 seconds, retrying connection and timeout
+    errors every half second. Readiness requires both HTTP 200 and the exact
+    response ``{"status": "ok"}``. If the server exits before becoming
+    ready, raise ``RuntimeError``; if the deadline expires, raise
+    ``TimeoutError``.
+    """
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -42,6 +70,14 @@ def wait_until_ready(process: subprocess.Popen[bytes]) -> None:
 
 
 def main() -> int:
+    """Start Uvicorn, exercise the health/create/list flow, and clean up.
+
+    The smoke flow creates a task using only its required title, expects
+    ``201`` and the submitted title in the response, then expects ``200`` and
+    a list containing the created task's ID. Any unexpected result raises an
+    exception and makes the script fail. The server is always terminated in
+    ``finally``; if it does not stop within five seconds, it is killed.
+    """
     process = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
         stdout=subprocess.DEVNULL,
