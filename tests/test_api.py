@@ -153,6 +153,139 @@ def test_create_task_can_link_dependencies_to_previously_created_task_chain(
     assert third_response.json()["dependency_ids"] == [second["id"]]
 
 
+def test_complete_task_without_dependencies_marks_task_completed(client):
+    task = client.post("/tasks", json={"title": "Standalone task"}).json()
+
+    response = client.post(f"/tasks/{task['id']}/complete")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == task["id"]
+    assert response.json()["completed"] is True
+    assert response.json()["due_status"] == "completed"
+    listed = client.get("/tasks").json()
+    assert next(item for item in listed if item["id"] == task["id"])["completed"]
+
+
+def test_complete_task_with_all_dependencies_completed(client):
+    first = client.post(
+        "/tasks", json={"title": "First prerequisite", "completed": True}
+    ).json()
+    second = client.post(
+        "/tasks", json={"title": "Second prerequisite", "completed": True}
+    ).json()
+    task = client.post(
+        "/tasks",
+        json={
+            "title": "Dependent task",
+            "dependency_ids": [first["id"], second["id"]],
+        },
+    ).json()
+
+    response = client.post(f"/tasks/{task['id']}/complete")
+
+    assert response.status_code == 200
+    assert response.json()["completed"] is True
+
+
+def test_complete_task_with_incomplete_direct_dependency_returns_conflict(
+    client,
+):
+    completed_prerequisite = client.post(
+        "/tasks",
+        json={"title": "Completed prerequisite", "completed": True},
+    ).json()
+    prerequisite = client.post(
+        "/tasks", json={"title": "Incomplete prerequisite"}
+    ).json()
+    dependent = client.post(
+        "/tasks",
+        json={
+            "title": "Dependent task",
+            "dependency_ids": [completed_prerequisite["id"], prerequisite["id"]],
+        },
+    ).json()
+
+    response = client.post(f"/tasks/{dependent['id']}/complete")
+
+    assert response.status_code == 409
+    listed = {
+        task["id"]: task for task in client.get("/tasks").json()
+    }
+    assert listed[dependent["id"]]["completed"] is False
+    assert listed[completed_prerequisite["id"]]["completed"] is True
+    assert listed[prerequisite["id"]]["completed"] is False
+
+
+def test_complete_task_does_not_recursively_complete_dependencies(client):
+    root = client.post("/tasks", json={"title": "Root task"}).json()
+    direct = client.post(
+        "/tasks",
+        json={"title": "Direct prerequisite", "dependency_ids": [root["id"]]},
+    ).json()
+    target = client.post(
+        "/tasks",
+        json={"title": "Target task", "dependency_ids": [direct["id"]]},
+    ).json()
+
+    response = client.post(f"/tasks/{target['id']}/complete")
+
+    assert response.status_code == 409
+    listed = {
+        task["id"]: task for task in client.get("/tasks").json()
+    }
+    assert listed[root["id"]]["completed"] is False
+    assert listed[direct["id"]]["completed"] is False
+    assert listed[target["id"]]["completed"] is False
+
+
+def test_complete_task_returns_not_found_for_unknown_id(client):
+    response = client.post("/tasks/999/complete")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Task not found"
+
+
+def test_create_completed_task_with_incomplete_dependency_returns_conflict(
+    client,
+):
+    prerequisite = client.post(
+        "/tasks", json={"title": "Incomplete prerequisite"}
+    ).json()
+
+    response = client.post(
+        "/tasks",
+        json={
+            "title": "Completed dependent task",
+            "completed": True,
+            "dependency_ids": [prerequisite["id"]],
+        },
+    )
+
+    assert response.status_code == 409
+    assert [task["id"] for task in client.get("/tasks").json()] == [
+        prerequisite["id"]
+    ]
+
+
+def test_create_completed_task_with_completed_dependencies_is_allowed(client):
+    prerequisite = client.post(
+        "/tasks", json={"title": "Completed prerequisite", "completed": True}
+    ).json()
+
+    response = client.post(
+        "/tasks",
+        json={
+            "title": "Completed dependent task",
+            "completed": True,
+            "dependency_ids": [prerequisite["id"]],
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["completed"] is True
+    assert response.json()["dependency_ids"] == [prerequisite["id"]]
+
+
 def test_create_task_normalizes_labels_and_lists_them(client):
     created = client.post(
         "/tasks",

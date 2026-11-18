@@ -97,6 +97,12 @@ Existing request fields and endpoints remain supported. `dependency_ids` is adde
 
 Invalid request data, such as a missing or out-of-range `title`, is rejected with a validation error.
 
+When `completed` is `true`, every listed dependency must already be complete; otherwise the request returns `409 Conflict` without creating the task.
+
+### `POST /tasks/{task_id}/complete`
+
+Marks an existing task complete and returns the task with `200 OK` when it has no dependencies or all its direct dependencies are complete. If any direct dependency is incomplete, the request returns `409 Conflict` and leaves the task unchanged. An unknown task ID returns `404 Not Found`. Completing a task does not complete its dependencies.
+
 Tasks are held in memory and reset when the server restarts. There is no database, authentication, user interface, Copilot customization, or external tool configuration in this starter. Later course modules add capabilities when the exercise requires them.
 
 Run the focused endpoint tests with `python -m unittest discover -s tests`.

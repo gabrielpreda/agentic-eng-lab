@@ -160,8 +160,8 @@ async def list_tasks(
 async def create_task(request: TaskCreate) -> Task:
     """Create a task and store it in memory."""
 
-    existing_ids = {task.id for task in _tasks}
-    unknown_ids = set(request.dependency_ids) - existing_ids
+    existing_tasks = {task.id: task for task in _tasks}
+    unknown_ids = set(request.dependency_ids) - existing_tasks.keys()
     if unknown_ids:
         raise HTTPException(
             status_code=422,
@@ -170,7 +170,37 @@ async def create_task(request: TaskCreate) -> Task:
                 f"{sorted(unknown_ids)}"
             ),
         )
+    if request.completed and any(
+        not existing_tasks[dependency_id].completed
+        for dependency_id in request.dependency_ids
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="All dependencies must be complete before task creation",
+        )
 
     task = Task(id=next(_task_ids), **request.model_dump())
     _tasks.append(task)
+    return task
+
+
+@app.post("/tasks/{task_id}/complete", response_model=Task)
+async def complete_task(task_id: int) -> Task:
+    """Mark a task complete when all its direct dependencies are complete."""
+
+    task = next((task for task in _tasks if task.id == task_id), None)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    tasks_by_id = {task.id: task for task in _tasks}
+    if any(
+        not tasks_by_id[dependency_id].completed
+        for dependency_id in task.dependency_ids
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="All dependencies must be complete before task completion",
+        )
+
+    task.completed = True
     return task
