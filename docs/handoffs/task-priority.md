@@ -2,7 +2,7 @@
 
 Update this note from the current repository state before changing to a new Copilot session. Keep it concise and factual.
 
-**Updated:** 2026-11-17  
+**Updated:** 2026-11-18  
 **Requirements status:** Approved; see `docs/requirements/task-priority.md`  
 **Specification status:** Approved; see `docs/specs/task-priority.md`  
 **Current task:** T-4 complete; all planned tasks T-1–T-4 done  
@@ -22,7 +22,7 @@ Update this note from the current repository state before changing to a new Copi
 |---|---|---|
 | `.venv/bin/python -m pytest tests/test_api.py -k "orders or keeps_priority" -q` | Passed: 2 passed | T-4 (AC-4); both tests failed before the change |
 | `.venv/bin/python -m pytest -q` | Passed: 35 passed | Full regression after T-4 |
-| `.venv/bin/python -m pytest -q` | Passed: 52 passed | Latest full regression, including the selected-date deadline tickets (2026-11-17) |
+| `.venv/bin/python -m pytest -q` | Passed: 65 passed | Latest full regression, including the selected-date deadline and task-label changes (2026-11-18) |
 
 ## Next step
 
